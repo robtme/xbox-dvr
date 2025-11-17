@@ -6,7 +6,7 @@ GOLINTER		 := $(shell which golangci-lint 2>/dev/null)
 GONILAWAY        := $(shell which nilaway 2>/dev/null)
 GO_BENCH_FLAGS	 := -short -bench=. -benchmem
 GO_BENCH		 := $(GO) test $(GO_BENCH_FLAGS)
-GO_BUILD		 := CGO_ENABLED=0 $(GO) build -ldflags "-s -w" -trimpath
+GO_BUILD		 := CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -ldflags "-s -w" -trimpath
 GO_FORMAT		 := $(GOFUMPT) -w
 GO_OPTIMIZE		 := $(GOFIELDALIGNMENT) -fix
 GO_TEST			 := $(GO) test -v -short

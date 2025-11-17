@@ -1,43 +1,49 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"github.com/spf13/cobra"
 	"github.com/wolveix/openxbl-go"
 )
 
-func init() {
-	cmd.AddCommand(cmdSync)
-	cmdSync.AddCommand(cmdSyncClips)
-	cmdSync.AddCommand(cmdSyncScreenshots)
-}
+func newSyncCMD() *cobra.Command {
+	syncClipsCMD := newSyncClipsCMD()
+	syncScreenshotsCMD := newSyncScreenshotsCMD()
 
-var (
-	cmdSync = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Sync your latest DVR clips and screenshots",
-		Args:  cobra.ExactArgs(0),
 		Run: func(command *cobra.Command, args []string) {
-			cmdSyncClips.Run(command, args)
-			cmdSyncScreenshots.Run(command, args)
+			syncClipsCMD.Run(command, args)
+			syncScreenshotsCMD.Run(command, args)
 		},
 	}
 
-	cmdSyncClips = &cobra.Command{
+	cmd.AddCommand(syncClipsCMD)
+	cmd.AddCommand(syncScreenshotsCMD)
+
+	return cmd
+}
+
+func newSyncClipsCMD() *cobra.Command {
+	cmd := &cobra.Command{
 		Use:   "clips",
 		Short: "Sync your latest DVR clips",
-		Run: func(command *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, _ []string) {
 			if cfg.APIKey == "" {
 				log.Fatal().Msg("API key is required, set it with `xdvr config set apiKey your-api-key`")
 			}
 
 			client := openxbl.NewClient(cfg.APIKey, timeout)
+			ctx := context.Background()
 			httpClient := &http.Client{Timeout: timeout}
 
 			var continuationToken string
@@ -45,12 +51,13 @@ var (
 			for {
 				log.Info().Msgf("Finding DVR clips")
 
-				clips, newContinuationToken, err := client.GetDVRClips(continuationToken)
+				clips, newContinuationToken, err := client.GetDVRClips(ctx, continuationToken)
 				if err != nil {
-					if err.Error() == "failed to find clips" {
+					if err.Error() == "find clips" {
 						log.Info().Msgf("No new clips to download")
 						return
 					}
+
 					log.Fatal().Err(err).Msg("Failed to retrieve clips")
 				}
 
@@ -62,7 +69,7 @@ var (
 						continue
 					}
 
-					if err := processDVR(client, httpClient, clip.DVRCapture); err != nil {
+					if err = processDVR(ctx, client, httpClient, clip.DVRCapture); err != nil {
 						log.Error().Err(err).Msgf("Failed to process clip: %s", downloadLink)
 					}
 				}
@@ -74,10 +81,14 @@ var (
 		},
 	}
 
-	cmdSyncScreenshots = &cobra.Command{
+	return cmd
+}
+
+func newSyncScreenshotsCMD() *cobra.Command {
+	cmd := &cobra.Command{
 		Use:   "screenshots",
 		Short: "Sync your latest DVR screenshots",
-		Run: func(command *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, _ []string) {
 			if cfg.APIKey == "" {
 				log.Fatal().Msg("API key is required, set it with `xdvr config set apiKey your-api-key`")
 			}
@@ -87,6 +98,7 @@ var (
 			}
 
 			client := openxbl.NewClient(cfg.APIKey, timeout)
+			ctx := context.Background()
 			httpClient := &http.Client{Timeout: timeout}
 
 			var continuationToken string
@@ -94,12 +106,13 @@ var (
 			for {
 				log.Info().Msgf("Finding DVR screenshots")
 
-				screenshots, newContinuationToken, err := client.GetDVRScreenshots(continuationToken)
+				screenshots, newContinuationToken, err := client.GetDVRScreenshots(ctx, continuationToken)
 				if err != nil {
-					if err.Error() == "failed to find screenshots" {
+					if err.Error() == "find screenshots" {
 						log.Info().Msgf("No new screenshots to download")
 						return
 					}
+
 					log.Fatal().Err(err).Msg("Failed to retrieve screenshots")
 				}
 
@@ -111,7 +124,7 @@ var (
 						continue
 					}
 
-					if err := processDVR(client, httpClient, screenshot.DVRCapture); err != nil {
+					if err = processDVR(ctx, client, httpClient, screenshot.DVRCapture); err != nil {
 						log.Error().Err(err).Msgf("Failed to process screenshot: %s", downloadLink)
 					}
 				}
@@ -122,16 +135,19 @@ var (
 			}
 		},
 	}
-)
 
-func processDVR(client *openxbl.Client, httpClient *http.Client, capture openxbl.DVRCapture) error {
+	return cmd
+}
+
+func processDVR(ctx context.Context, client *openxbl.Client, httpClient *http.Client, capture openxbl.DVRCapture) error {
 	downloadURL := capture.GetDownloadLink()
 	if downloadURL == "" {
 		return nil
 	}
 
-	gamePath := filepath.Clean(cfg.SavePath + slash + strings.ToLower(string(capture.Type)) + "s" + slash + capture.TitleName)
-	contentPath := filepath.Clean(gamePath + slash + capture.TitleName + " - " + capture.UploadDate.Format("2006-01-02 15_04_05"))
+	gameTitle := sanitizePath(capture.TitleName)
+	gamePath := filepath.Join(cfg.SavePath, strings.ToLower(string(capture.Type))+"s", gameTitle)
+	contentPath := filepath.Join(gamePath, fmt.Sprintf("%s - %s", gameTitle, capture.UploadDate.Format("2006-01-02 15_04_05")))
 
 	if capture.Type == openxbl.DVRCaptureTypeClip {
 		contentPath += ".mp4"
@@ -141,7 +157,7 @@ func processDVR(client *openxbl.Client, httpClient *http.Client, capture openxbl
 
 	// Create dir for title.
 	if err := os.MkdirAll(gamePath, os.ModePerm); err != nil {
-		log.Fatal().Err(err).Msgf("Failed to create save directory for game: %s", capture.TitleName)
+		return fmt.Errorf("create save directory for %s: %w", capture.TitleName, err)
 	}
 
 	if _, err := os.Stat(contentPath); err == nil {
@@ -151,35 +167,53 @@ func processDVR(client *openxbl.Client, httpClient *http.Client, capture openxbl
 
 	log.Info().Msgf("Downloading %s", contentPath)
 
-	// Download file.
-	response, err := httpClient.Get(downloadURL)
+	// Download the file.
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
 	if err != nil {
-		return fmt.Errorf("failed to download file: %s", downloadURL)
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != 200 {
-		return fmt.Errorf("failed to download file: %s", downloadURL)
+		return fmt.Errorf("create request: %w", err)
 	}
 
-	// Read response body.
-	body, err := io.ReadAll(response.Body)
+	resp, err := httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
+		return fmt.Errorf("make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download file: %s", downloadURL)
 	}
 
-	// Write response body to disk.
+	// Read the response body.
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read response body: %w", err)
+	}
+
+	// Write the response body to disk.
 	if err = os.WriteFile(contentPath, body, 0o644); err != nil {
-		return fmt.Errorf("failed to write file to disk: %w", err)
+		return fmt.Errorf("write file to disk: %w", err)
 	}
 
-	if cfg.AutoDelete && capture.Type == "clips" {
+	if cfg.AutoDelete && capture.Type == openxbl.DVRCaptureTypeClip {
 		log.Info().Msg("Deleting clip from XBL")
 
-		if err = client.DeleteDVRClip(capture.ID); err != nil {
-			log.Fatal().Err(err).Msgf("Failed to delete clip: %s", downloadURL)
+		if err = client.DeleteDVRClip(ctx, capture.ID); err != nil {
+			return fmt.Errorf("delete clip: %w", err)
 		}
 	}
 
 	return nil
+}
+
+func sanitizePath(path string) string {
+	var b strings.Builder
+	for _, r := range path {
+		switch {
+		case r == ' ' || r == '-' || r == '_':
+			b.WriteRune(r)
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }

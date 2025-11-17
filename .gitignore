@@ -1,0 +1,9 @@
+*.db*
+*.DS_Store
+*.idea
+*.log
+*.sh
+bin
+build
+cmd/tmp
+

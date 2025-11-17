@@ -10,25 +10,26 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func init() {
-	cmd.AddCommand(cmdConfig)
-	cmdConfig.AddCommand(cmdConfigGet)
-	cmdConfig.AddCommand(cmdConfigSet)
-	cmdConfig.AddCommand(cmdConfigShow)
-}
-
-var (
-	cmdConfig = &cobra.Command{
+func newConfigCMD() *cobra.Command {
+	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Configure your DSS instance",
 	}
 
-	cmdConfigGet = &cobra.Command{
+	cmd.AddCommand(newConfigGetCMD())
+	cmd.AddCommand(newConfigSetCMD())
+	cmd.AddCommand(newConfigShowCMD())
+
+	return cmd
+}
+
+func newConfigGetCMD() *cobra.Command {
+	cmd := &cobra.Command{
 		Use:     "get",
 		Short:   "Get a config value",
 		Example: "  xdvr config get apiKey",
 		Args:    cobra.ExactArgs(1),
-		Run: func(command *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, args []string) {
 			switch args[0] {
 			case "apiKey", "apikey":
 				fmt.Printf("apiKey: %v\n", cfg.APIKey)
@@ -42,12 +43,16 @@ var (
 		},
 	}
 
-	cmdConfigSet = &cobra.Command{
+	return cmd
+}
+
+func newConfigSetCMD() *cobra.Command {
+	cmd := &cobra.Command{
 		Use:     "set",
 		Short:   "Set a config value",
 		Example: "  xdvr config set apiKey your-api-key",
 		Args:    cobra.ExactArgs(2),
-		Run: func(command *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, args []string) {
 			switch args[0] {
 			case "apiKey", "apikey":
 				cfg.APIKey = args[1]
@@ -87,12 +92,16 @@ var (
 		},
 	}
 
-	cmdConfigShow = &cobra.Command{
+	return cmd
+}
+
+func newConfigShowCMD() *cobra.Command {
+	cmd := &cobra.Command{
 		Use:     "show",
 		Short:   "Print full config",
 		Example: "  xdvr config show",
 		Args:    cobra.ExactArgs(0),
-		Run: func(command *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, _ []string) {
 			output, err := yaml.Marshal(cfg)
 			if err != nil {
 				log.Fatal().Err(err).Msg("Failed to marshal YAML config")
@@ -101,7 +110,9 @@ var (
 			fmt.Print(string(output))
 		},
 	}
-)
+
+	return cmd
+}
 
 type Config struct {
 	dir        string
@@ -111,18 +122,18 @@ type Config struct {
 	SavePath   string `json:"savePath" yaml:"savePath"`
 }
 
-func NewConfig(directory string) (*Config, error) {
+func newConfig(directory string) (*Config, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return nil, fmt.Errorf("failed to find home directory: %w", err)
+		return nil, fmt.Errorf("find home directory: %w", err)
 	}
 
 	config := Config{
 		dir:        directory,
-		path:       directory + slash + "config.yml",
+		path:       filepath.Join(directory, "config.yml"),
 		APIKey:     "",
 		AutoDelete: false,
-		SavePath:   homeDir + slash + "xbox-dvr",
+		SavePath:   filepath.Join(homeDir, "xbox-dvr"),
 	}
 
 	if err = config.Load(); err != nil {
@@ -133,7 +144,6 @@ func NewConfig(directory string) (*Config, error) {
 }
 
 func (c *Config) Load() error {
-	// Create config if it doesn't exist.
 	if _, err := os.Stat(c.path); os.IsNotExist(err) {
 		if err = os.MkdirAll(c.dir, os.ModePerm); err != nil {
 			log.Fatal().Err(err).Msg("Failed to create config directory")
@@ -144,7 +154,6 @@ func (c *Config) Load() error {
 		}
 	}
 
-	// Read config.
 	configData, err := os.ReadFile(c.path)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Unable to read config file")
@@ -154,7 +163,6 @@ func (c *Config) Load() error {
 		log.Fatal().Err(err).Msg("Unable to unmarshal config values")
 	}
 
-	// Check environment vars.
 	if val, ok := os.LookupEnv("apiKey"); ok {
 		c.APIKey = val
 	}
@@ -173,8 +181,12 @@ func (c *Config) Load() error {
 func (c *Config) Save() error {
 	configData, err := yaml.Marshal(c)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Unable to marshal default config")
+		return fmt.Errorf("marshal config: %w", err)
 	}
 
-	return os.WriteFile(c.path, configData, os.ModePerm)
+	if err = os.WriteFile(c.path, configData, os.ModePerm); err != nil {
+		return fmt.Errorf("writing config: %w", err)
+	}
+
+	return nil
 }
