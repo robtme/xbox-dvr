@@ -10,8 +10,8 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/robtme/openxbl-go"
 	"github.com/spf13/cobra"
-	"github.com/wolveix/openxbl-go"
 )
 
 func newSyncCMD() *cobra.Command {

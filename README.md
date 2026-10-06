@@ -5,18 +5,18 @@ Xbox DVR uses [OpenXBL](https://xbl.io/)'s API to find and download your latest 
 ## Download
 
 You can download pre-compiled binaries for macOS, Linux and Windows from
-the [releases](https://github.com/wolveix/xbox-dvr/releases) page.
+the [releases](https://github.com/robtme/xbox-dvr/releases) page.
 
 Alternatively, you can run the binary from within the pre-built Docker image:
 
 ```shell
-docker run ghcr.io/wolveix/xbox-dvr:latest
+docker run ghcr.io/robtme/xbox-dvr:latest
 ```
 
 ## Run with Docker
 
 ```shell
-docker run --rm -e apiKey=your-openxbl-api-key -e autoDelete=false -e savePath=/out -v ./xbox-dvr:/out wolveix/xbox-dvr:latest sync
+docker run --rm -e apiKey=your-openxbl-api-key -e autoDelete=false -e savePath=/out -v ./xbox-dvr:/out robtme/xbox-dvr:latest sync
 ```
 
 ## Run with Docker Compose
@@ -26,7 +26,7 @@ services:
   xbox-dvr:
     container_name: 'xbox-dvr'
     hostname: 'xbox-dvr'
-    image: 'wolveix/xbox-dvr:latest'
+    image: 'robtme/xbox-dvr:latest'
     volumes:
       - '/your/output/directory:/out'
     environment:
@@ -41,7 +41,7 @@ services:
 To build this application, you'll need [Go](https://golang.org/) installed.
 
 ```shell
-git clone https://github.com/wolveix/xbox-dvr.git
+git clone https://github.com/robtme/xbox-dvr.git
 cd xbox-dvr
 make
 ```

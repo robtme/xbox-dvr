@@ -2,7 +2,7 @@ services:
   xbox-dvr:
     container_name: 'xbox-dvr'
     hostname: 'xbox-dvr'
-    image: 'wolveix/xbox-dvr:latest'
+    image: 'robtme/xbox-dvr:latest'
     volumes:
       - '/your/output/directory:/out'
     environment:

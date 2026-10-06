@@ -1,4 +1,4 @@
-PROJECT			 := github.com/wolveix/xbox-dvr
+PROJECT			 := github.com/robtme/xbox-dvr
 GO				 := $(shell which go 2>/dev/null)
 GOFIELDALIGNMENT := $(shell which fieldalignment 2>/dev/null)
 GOFUMPT			 := $(shell which gofumpt 2>/dev/null)
